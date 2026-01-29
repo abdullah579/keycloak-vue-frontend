@@ -2,6 +2,15 @@
   <div>
     <h1>Keycloak Login Demo</h1>
 
+    <!-- Only show admin button if user has 'admin' role -->
+    <div v-if="isAuthenticated">
+      <p><strong>Roles:</strong> {{ roles.join(', ') }}</p>
+
+      <button v-if="roles.includes('admin')" @click="getAdminArea">Admin Area</button>
+      <button v-if="roles.includes('user')" @click="getUserArea">User Area</button>
+    </div>
+
+
     <!-- Login / Logout Buttons -->
     <button @click="login" v-if="!isAuthenticated">Login</button>
     <button @click="logout" v-if="isAuthenticated">Logout</button>
@@ -46,6 +55,14 @@ export default {
     if (this.$keycloak.authenticated) {
       this.isAuthenticated = true;
       this.token = this.$keycloak.token;
+
+      // Set user info from token directly
+      this.user = this.$keycloak.tokenParsed;
+    }
+  },
+  computed: {
+    roles() {
+      return this.$keycloak.tokenParsed?.realm_access?.roles || [];
     }
   },
   methods: {
@@ -53,10 +70,13 @@ export default {
       this.$keycloak.login();
     },
     logout() {
-      this.$keycloak.logout({ redirectUri: window.location.origin });
-      this.isAuthenticated = false;
-      this.user = null;
-      this.token = null;
+      this.$keycloak.logout({
+        redirectUri: window.location.origin
+      }).then(() => {
+        this.isAuthenticated = false;
+        this.user = null;
+        this.token = null;
+      }).catch(err => console.error('Logout error', err));
     },
     async getProfile() {
       try {
@@ -71,7 +91,31 @@ export default {
         console.error('API error:', err);
         alert('Failed to fetch profile');
       }
-    }
+    },
+    async getAdminArea() {
+      try {
+        const res = await fetch('http://localhost:8000/api/admin-area', {
+          headers: { Authorization: `Bearer ${this.$keycloak.token}` }
+        });
+        const data = await res.json();
+        alert(JSON.stringify(data));
+      } catch (err) {
+        alert('Admin area access denied');
+        console.error(err);
+      }
+    },
+    async getUserArea() {
+      try {
+        const res = await fetch('http://localhost:8000/api/user-area', {
+          headers: { Authorization: `Bearer ${this.$keycloak.token}` }
+        });
+        const data = await res.json();
+        alert(JSON.stringify(data));
+      } catch (err) {
+        alert('User area access denied');
+        console.error(err);
+      }
+    },
   }
 };
 </script>
@@ -82,13 +126,16 @@ button {
   padding: 8px 12px;
   font-size: 16px;
 }
+
 textarea {
   margin-top: 10px;
 }
+
 ul {
   list-style: none;
   padding: 0;
 }
+
 li {
   margin-bottom: 4px;
 }
